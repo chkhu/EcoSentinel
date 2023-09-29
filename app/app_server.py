@@ -10,12 +10,16 @@ import cv2
 SC_API_KEY = "zRzIr6rPTs0cGEvWt5G6rBpR"
 SC_SECRET_KEY = "bZ5mIN37G304K1fNUwOvZSkoMStbi5Gh"
 
-# 连接 salesforce BLIP 的inference API
+# 连接 salesforce BLIP 的inference API 准备
 API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
 blip_headers = {"Authorization": "Bearer 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"}
 
 # 自定义的知识库字符串，用于个性化定制文心大模型
 knowledge_base = ""  
+
+# 为应对多次分析请求，初始化一个列表来存储所有生成的文本。
+generated_texts = []
+
 
 # 文心API的调用函数
 # INPUT：用户的输入文本
@@ -56,13 +60,7 @@ def get_access_token():
     print("ACCESS_TOKEN OBTAINED: \n" + response.text + "\n")
     return str(response.json().get("access_token"))
 
-
-# def query(filename):
-#     with open(filename, "rb") as f:
-#         data = f.read()
-#     response = requests.post(API_URL, headers=blip_headers, data=data)
-#     return response.json()
-
+# BLIP API的调用函数
 def query(image_data):
     response = requests.post(API_URL, headers=blip_headers, data=image_data)
     return response.json()
@@ -71,22 +69,14 @@ def query(image_data):
 # INPUT：用户上传的图片
 # OUTPUT：图片分析文本
 def image_analysis(input_image):
-
-    # 如果 input_image 是 BGR，转换为 RGB
-    input_image = input_image[:, :, ::-1]  # ::-1 会将最后一个维度（颜色通道）反转
-
-    # DEBUG: 保存input_image到本地
-    cv2.imwrite('temp.jpg', input_image)
-
+    # # DEBUG: 保存input_image到本地
+    # cv2.imwrite('temp.jpg', input_image)
+    # print("IMAGE ARRAY MAX VALUE" + str(input_image.max())) # 255
 
     # 将输入的input_image(numpy数组类型)转成query函数可以接受的Bytes类型
-    # img = Image.fromarray((input_image * 255).astype(np.uint8))  # Gradio 返回的图像数组通常是 float32 类型，范围在 [0, 1] 之间，需要转换为 uint8，范围 [0, 255]    
-    img = Image.fromarray(input_image)  # 此时 input_image 应该是 RGB 格式，uint8 类型，范围 [0, 255]
-
+    img = Image.fromarray(input_image.astype(np.uint8))  # 需要转换为 uint8，范围 [0, 255]    
     img_byte_arr = io.BytesIO()  # 创建一个字节流对象
-    
     img.save(img_byte_arr, format='PNG')  # 将图像保存到字节流中，可以选择不同的格式，例如 'JPEG'，这里用 'PNG'
-    
     img_byte_arr = img_byte_arr.getvalue()  # 获取字节流的值
 
     # 调用 query 函数
@@ -95,8 +85,12 @@ def image_analysis(input_image):
     # # DEBUG
     # print("TYPE OF OUTPUT OF QUERY\n")
     # print(type(output)) # list
+    
+    # 取出列表的0号元素，然后用 ['generated_text'] 取出字典中的值
+    newly_generated_text = output[0]['generated_text'] 
+    generated_texts.append(newly_generated_text)
+    generated_text = generated_texts[-1] #  取列表的最后一个元素，确保每次都是最新的文本
 
-    generated_text = output[0]['generated_text']  # 取出列表的0号元素，然后用 ['generated_text'] 取出字典中的值
     # 最后，返回生成的文本
     return generated_text
 
