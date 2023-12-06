@@ -4,7 +4,6 @@ import gradio as gr  # 用gradio创建图形用户界面
 import io  # 用于处理字节流
 from PIL import Image
 import numpy as np
-# import cv2
 # import paddlex as pdx
 # from paddlex.det import transforms
 
@@ -14,12 +13,13 @@ SC_API_KEY = "Ge1lZ7If6RUzKuIqvpqR5MY2"
 SC_SECRET_KEY = "cEUo45RrQAgBjr1oVg8Y9kxG155fYERB"
 
 # salesforce BLIP 的inference API reference KEY
-API_URL_BLIP = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
-blip_headers = {"Authorization": "Bearer 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"}
+API_URL_BLIP = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base"
+headers_BLIP = {"Authorization": "Bearer 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"}
 
-# 烟火检测（判断）API reference KEY
-API_URL_FIRE_VIT = "https://api-inference.huggingface.co/models/EdBianchi/vit-fire-detection"
-headers_FIRE_VIT = {"Authorization": "Bearer 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"}
+# 烟火检测（判断）VIT API reference KEY
+API_URL_VIT = "https://api-inference.huggingface.co/models/EdBianchi/vit-fire-detection"
+headers_VIT = {"Authorization": "Bearer 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"}
+
 
 # 获取百度AI的access_token（输入SC_API_KEY 和 SC_SECRET_KEY，输出access_token）
 def get_access_token(): 
@@ -36,9 +36,6 @@ def get_access_token():
 
 # 自定义的知识库字符串，用于个性化定制文心大模型
 knowledge_base = "林业管理和应急消防的专业知识"  
-
-# # 为应对多次分析请求，初始化一个列表来存储所有生成的文本。
-# generated_texts = []
 
 # 文心API的调用函数
 # INPUT：用户的输入文本
@@ -68,10 +65,10 @@ def main_app(input_text):
 def elaborate_description(input_text):
     url = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions?access_token=" + get_access_token()
     payload = json.dumps({  # 将 Python 对象转换编码成 JSON 字符串
-        "messages": [   # 拼接出完整query，包含三部分：引导词、知识库、场景描述
+        "messages": [  # 拼接message，引导修改场景描述
             {
                 "role": "user",
-                "content": "请你根据下面的描述文字，合理地扩写（注意扩写后的文字应该是客观、冷静的、描述性的林业管理术语），如果是原文段写的是林火，扩写后的文字也只应该包括对火情的描述，不应该有附加的原因分析、措施建议和总结——"  + 
+                "content": "翻译成中文："  + 
                     input_text,
             }
         ]
@@ -87,7 +84,7 @@ def elaborate_description(input_text):
 
 # BLIP API的调用函数
 def BLIP_query(image_data):
-    response = requests.post(API_URL_BLIP, headers=blip_headers, data=image_data)
+    response = requests.post(API_URL_BLIP, headers=headers_BLIP, data=image_data)
     # 在BLIP_query调用后添加这行
     return response.json()
 
@@ -95,10 +92,6 @@ def BLIP_query(image_data):
 # INPUT：用户上传的图片
 # OUTPUT：图片分析文本
 def image_analysis(input_image):
-
-    # # DEBUG: 保存input_image到本地
-    # cv2.imwrite('temp.jpg', input_image)
-    # print("IMAGE ARRAY MAX VALUE" + str(input_image.max())) # 255
 
     # 将输入的input_image(numpy数组类型)转成query函数可以接受的Bytes类型
     img = Image.fromarray(input_image.astype(np.uint8))  # 需要转换为 uint8，范围 [0, 255]    
@@ -109,23 +102,18 @@ def image_analysis(input_image):
     # 调用 BLIP_query 函数
     output = BLIP_query(img_byte_arr)
 
-    # # DEBUG
+    # DEBUG
     print("✨✨✨✨✨✨✨✨✨BLIP output:", output)
-
-    # # DEBUG
-    # print("TYPE OF OUTPUT OF QUERY\n")
-    # print(type(output)) # list
     
     # 取出列表的0号元素，然后用 ['generated_text'] 取出字典中的值
     newly_generated_text = output[0]['generated_text'] 
-    # generated_texts.append(newly_generated_text)
-    # generated_text = generated_texts[-1] #  取列表的最后一个元素，确保每次都是最新的文本
 
+    # ⚠️DEBUG：暂时不引入elanorate_description函数
     # 将newly_generated_text传给文心API，进行扩写
-    elaborated_text = elaborate_description(newly_generated_text)
+    newly_generated_text = elaborate_description(newly_generated_text)
 
     # 最后，返回生成的文本
-    return elaborated_text
+    return newly_generated_text
 
 
 
@@ -153,13 +141,13 @@ def detect(input_image):
     # output_image = Image.open('../visualize_test_image.jpg')
     
     # FILL TEMPORAIRLY to test the front-end look
-    output_image = Image.open('../visualized_test_image_temp.jpg')
+    output_image = Image.open('../visualize_test_image_temp.jpg')
 
     return output_image
 
 
 def judge_query(image_data):
-    response = requests.post(API_URL_FIRE_VIT, headers=headers_FIRE_VIT, data=image_data)
+    response = requests.post(API_URL_VIT, headers=headers_VIT, data=image_data)
     return response.json()
 
 def judge(input_image):
