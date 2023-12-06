@@ -17,7 +17,6 @@ SC_SECRET_KEY = "cEUo45RrQAgBjr1oVg8Y9kxG155fYERB"
 API_URL_BLIP = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base"
 headers_BLIP = {"Authorization": "Bearer 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"}
 
-g_USE_VIDEO = False
 # 烟火检测（判断）VIT API reference KEY
 API_URL_VIT = "https://api-inference.huggingface.co/models/EdBianchi/vit-fire-detection"
 headers_VIT = {"Authorization": "Bearer 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"}
@@ -94,7 +93,6 @@ def BLIP_query(image_data):
 # INPUT：用户上传的图片
 # OUTPUT：图片分析文本
 def image_analysis(input_image):
-
     # 将输入的input_image(numpy数组类型)转成query函数可以接受的Bytes类型
     img = Image.fromarray(input_image.astype(np.uint8))  # 需要转换为 uint8，范围 [0, 255]    
     img_byte_arr = io.BytesIO()  # 创建一个字节流对象
@@ -115,7 +113,6 @@ def image_analysis(input_image):
     newly_generated_text = elaborate_description(newly_generated_text)
 
     # 最后，返回生成的文本
-    g_USE_VIDEO = False
     return newly_generated_text
 
 
@@ -126,6 +123,8 @@ def video_analysis(input_video):
     # 获取视频总帧数
     vidFrame = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))  
     # 视频时间
+    if(vidFrame==0):
+        return "视频无效，请重新上传！"
     vidTime = vidFrame / vidcap.get(cv2.CAP_PROP_FPS)
     maxFrame = 10
     minInterval = 0.5 
@@ -149,7 +148,6 @@ def video_analysis(input_video):
         count += 1
         print("FRAME " + str(count) + " ANALYZED: "+ result_of_frame)
     # 3. 拼接结果
-    g_USE_VIDEO = True
     return "\n".join(video_analysis_result)
 
 
@@ -232,17 +230,14 @@ def judge(input_image):
 
 # 在Gradio UI中增加新的组件
 with gr.Blocks() as demo:
-    with gr.Tab("上传图片"):
-        with gr.Row():
+    with gr.Row():
+        with gr.Tab("上传图片"):
             image_input = gr.Image()
-            img_analysis_result = gr.Textbox(label="分析结果")
-        img_analysis_button = gr.Button("分析图片")
-    with gr.Tab("上传视频"):
-        with gr.Row():
+            img_analysis_button = gr.Button("分析图片")
+        with gr.Tab("上传视频"):
             video_input = gr.Video()
-            video_analysis_result = gr.Textbox(label="分析结果")
-        video_analysis_button = gr.Button("分析视频")
-
+            video_analysis_button = gr.Button("分析视频")
+        analysis_result = gr.Textbox(label="分析结果")
         
         
     with gr.Tab("建议"):
@@ -257,10 +252,10 @@ with gr.Blocks() as demo:
         detected_image_output = gr.Image(label="目标检测结果", image_mode='fixed', width=600)  # 新增图像输出组件
     detect_button = gr.Button("显示目标检测结果")  # 新增按钮
     
-    img_analysis_button.click(image_analysis, inputs=image_input, outputs=img_analysis_result) # 将按钮与image_analysis函数关联
-    video_analysis_button.click(video_analysis, inputs=video_input, outputs=video_analysis_result) # 将按钮与video_analysis函数关联
+    img_analysis_button.click(image_analysis, inputs=image_input, outputs=analysis_result) # 将按钮与image_analysis函数关联
+    video_analysis_button.click(video_analysis, inputs=video_input, outputs=analysis_result) # 将按钮与video_analysis函数关联
 
-    text_button.click(main_app, inputs=video_analysis_result if g_USE_VIDEO else img_analysis_result  , outputs=text_output) # 将按钮与main_app函数关联
+    text_button.click(main_app, inputs=analysis_result, outputs=text_output) # 将按钮与main_app函数关联
     
     detect_button.click(detect, inputs=image_input, outputs=detected_image_output)  # 将按钮与detect函数关联
     judge_button.click(judge, inputs=image_input, outputs=judge_image_output)  # 将按钮与judge_query函数关联
