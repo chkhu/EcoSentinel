@@ -4,6 +4,7 @@ import gradio as gr  # 用gradio创建图形用户界面
 import io  # 用于处理字节流
 from PIL import Image
 import numpy as np
+import cv2
 # import paddlex as pdx
 # from paddlex.det import transforms
 
@@ -16,6 +17,7 @@ SC_SECRET_KEY = "cEUo45RrQAgBjr1oVg8Y9kxG155fYERB"
 API_URL_BLIP = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base"
 headers_BLIP = {"Authorization": "Bearer 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"}
 
+g_USE_VIDEO = False
 # 烟火检测（判断）VIT API reference KEY
 API_URL_VIT = "https://api-inference.huggingface.co/models/EdBianchi/vit-fire-detection"
 headers_VIT = {"Authorization": "Bearer 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"}
@@ -113,8 +115,42 @@ def image_analysis(input_image):
     newly_generated_text = elaborate_description(newly_generated_text)
 
     # 最后，返回生成的文本
+    g_USE_VIDEO = False
     return newly_generated_text
 
+
+def video_analysis(input_video):
+    # 思路是抽取视频关键帧，然后对关键帧进行分析，最后将所有的分析结果拼接起来
+    # 1. 读取视频
+    vidcap = cv2.VideoCapture(input_video)
+    # 获取视频总帧数
+    vidFrame = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))  
+    # 视频时间
+    vidTime = vidFrame / vidcap.get(cv2.CAP_PROP_FPS)
+    maxFrame = 10
+    minInterval = 0.5 
+    # 实际每几秒处理一次
+    intervalTime = max(minInterval, vidTime / maxFrame)
+    # 实际每几帧处理一次
+    intervalFrame = int(intervalTime * vidcap.get(cv2.CAP_PROP_FPS))
+
+    # 2. 抽取帧处理
+    success, image = vidcap.read()
+    count = 0
+
+    video_analysis_result = []
+    while success:
+        # 2.1 处理帧
+        result_of_frame = image_analysis(image)
+        video_analysis_result.append(result_of_frame)
+        # 2.2 读取下一帧
+        vidcap.set(cv2.CAP_PROP_POS_FRAMES, count * intervalFrame)
+        success, image = vidcap.read()
+        count += 1
+        print("FRAME " + str(count) + " ANALYZED: "+ result_of_frame)
+    # 3. 拼接结果
+    g_USE_VIDEO = True
+    return "\n".join(video_analysis_result)
 
 
 # 目标检测函数
@@ -196,10 +232,18 @@ def judge(input_image):
 
 # 在Gradio UI中增加新的组件
 with gr.Blocks() as demo:
-    with gr.Row():
-        image_input = gr.Image()
-        analysis_result = gr.Textbox(label="分析结果")
-    analysis_button = gr.Button("分析图片")
+    with gr.Tab("上传图片"):
+        with gr.Row():
+            image_input = gr.Image()
+            img_analysis_result = gr.Textbox(label="分析结果")
+        img_analysis_button = gr.Button("分析图片")
+    with gr.Tab("上传视频"):
+        with gr.Row():
+            video_input = gr.Video()
+            video_analysis_result = gr.Textbox(label="分析结果")
+        video_analysis_button = gr.Button("分析视频")
+
+        
         
     with gr.Tab("建议"):
         text_output = gr.Textbox(label="输出")
@@ -213,8 +257,11 @@ with gr.Blocks() as demo:
         detected_image_output = gr.Image(label="目标检测结果", image_mode='fixed', width=600)  # 新增图像输出组件
     detect_button = gr.Button("显示目标检测结果")  # 新增按钮
     
-    analysis_button.click(image_analysis, inputs=image_input, outputs=analysis_result) # 将按钮与image_analysis函数关联
-    text_button.click(main_app, inputs=analysis_result, outputs=text_output) # 将按钮与main_app函数关联
+    img_analysis_button.click(image_analysis, inputs=image_input, outputs=img_analysis_result) # 将按钮与image_analysis函数关联
+    video_analysis_button.click(video_analysis, inputs=video_input, outputs=video_analysis_result) # 将按钮与video_analysis函数关联
+
+    text_button.click(main_app, inputs=video_analysis_result if g_USE_VIDEO else img_analysis_result  , outputs=text_output) # 将按钮与main_app函数关联
+    
     detect_button.click(detect, inputs=image_input, outputs=detected_image_output)  # 将按钮与detect函数关联
     judge_button.click(judge, inputs=image_input, outputs=judge_image_output)  # 将按钮与judge_query函数关联
 
